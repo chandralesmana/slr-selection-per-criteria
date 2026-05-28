@@ -33,7 +33,7 @@ def get_model(model_name: str, hf_token: Optional[str] = None, enable_gpu: bool 
             kwargs = {}
             if enable_gpu:
                 # Use float16 to halve the VRAM requirement on GPU
-                kwargs["torch_dtype"] = torch.float16
+                kwargs["dtype"] = torch.float16
                 
             models_cache[cache_key] = pipeline(
                 "text-generation", 
