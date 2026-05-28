@@ -275,20 +275,31 @@ def slr_selection_generate_per_criteria(request: SlrSelectionPerCriteriaRequest)
 class PostprocessingRequest(BaseModel):
     likert_score: Union[float, list[float]] = Field(..., alias="likert-score")
     threshold: float
+    logic: str = "AND"
 
 class PostprocessingResponse(BaseModel):
-    label: Union[str, list[str]]
+    label: str
 
 @app.post("/postprocessing", response_model=PostprocessingResponse)
 def postprocessing(request: PostprocessingRequest):
     """
     Endpoint to assign 'relevant' or 'irrelevant' labels based on likert-score(s)
     and a given threshold. Works for both a single score and a list of scores.
+    If a list is provided, it aggregates the boolean results using the specified logic (AND/OR).
     """
     try:
         if isinstance(request.likert_score, list):
-            labels = ["relevant" if score >= request.threshold else "irrelevant" for score in request.likert_score]
-            return PostprocessingResponse(label=labels)
+            # Check threshold for each score
+            bool_results = [score >= request.threshold for score in request.likert_score]
+            
+            # Aggregate using the specified logic
+            if request.logic.upper() == "OR":
+                final_result = any(bool_results)
+            else:
+                final_result = all(bool_results)  # default to AND
+                
+            label = "relevant" if final_result else "irrelevant"
+            return PostprocessingResponse(label=label)
         else:
             label = "relevant" if request.likert_score >= request.threshold else "irrelevant"
             return PostprocessingResponse(label=label)
