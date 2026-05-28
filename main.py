@@ -60,6 +60,7 @@ class TextRequest(BaseModel):
     model_name: str = ""
     hf_token: Optional[str] = None
     max_length: int = 50
+    temperature: float = 0.0
     enable_gpu: bool = True
     debug: bool = True
 
@@ -81,7 +82,14 @@ def generate_text(request: TextRequest):
         generator = get_model(request.model_name, request.hf_token, request.enable_gpu)
         
         # Run the model with additional parameters
-        result = generator(request.text, max_length=request.max_length, num_return_sequences=1)
+        gen_kwargs = {"max_length": request.max_length, "num_return_sequences": 1}
+        if request.temperature > 0:
+            gen_kwargs["temperature"] = request.temperature
+            gen_kwargs["do_sample"] = True
+        else:
+            gen_kwargs["do_sample"] = False
+            
+        result = generator(request.text, **gen_kwargs)
         
         response = {
             "prompt": request.text,
@@ -107,6 +115,7 @@ class SlrSelectionRequest(BaseModel):
     model_name: str = ""
     hf_token: Optional[str] = None
     max_length: int = 50
+    temperature: float = 0.0
     enable_gpu: bool = True
     debug: bool = True
 
@@ -137,7 +146,14 @@ def slr_selection_generate(request: SlrSelectionRequest):
         generator = get_model(request.model_name, request.hf_token, request.enable_gpu)
 
         # Run the model with additional parameters
-        result = generator(prompt, max_length=request.max_length, num_return_sequences=1)
+        gen_kwargs = {"max_length": request.max_length, "num_return_sequences": 1}
+        if request.temperature > 0:
+            gen_kwargs["temperature"] = request.temperature
+            gen_kwargs["do_sample"] = True
+        else:
+            gen_kwargs["do_sample"] = False
+            
+        result = generator(prompt, **gen_kwargs)
 
         response = {
             "title": request.title,
@@ -180,7 +196,15 @@ def slr_selection_generate_global_structured(request: SlrSelectionRequest):
         prompt = SLR_SELECTION_PROMPT_TEMPLATE.format(
             title=request.title,
             abstract=request.abstract,
-            criteria=request.criteria,
+        )
+        gen_kwargs = {"max_length": request.max_length, "num_return_sequences": 1}
+        if request.temperature > 0:
+            gen_kwargs["temperature"] = request.temperature
+            gen_kwargs["do_sample"] = True
+        else:
+            gen_kwargs["do_sample"] = False
+            
+        result = generator(prompt, **gen_kwargs
         )
 
         # Retrieve the model from cache or load a new one
@@ -205,12 +229,14 @@ def slr_selection_generate_global_structured(request: SlrSelectionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 class SlrSelectionPerCriteriaRequest(BaseModel):
     title: str
     abstract: str
     criteria: list[str]
     model_name: str = ""
     hf_token: Optional[str] = None
+    temperature: float = 0.0
     max_length: int = 50
     enable_gpu: bool = True
     debug: bool = True
@@ -252,7 +278,14 @@ def slr_selection_generate_per_criteria(request: SlrSelectionPerCriteriaRequest)
             )
             prompts.append(prompt)
 
-            # Run the model with additional parameters
+            gen_kwargs = {"max_length": request.max_length, "num_return_sequences": 1}
+            if request.temperature > 0:
+                gen_kwargs["temperature"] = request.temperature
+                gen_kwargs["do_sample"] = True
+            else:
+                gen_kwargs["do_sample"] = False
+                
+            result = generator(prompt, **gen_kwargs)
             result = generator(prompt, max_length=request.max_length, num_return_sequences=1)
             
             # Extract the score from the generated output
