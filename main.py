@@ -2,7 +2,7 @@ import time
 import gc
 import re
 import torch
-from typing import Optional
+from typing import Optional, Union
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from transformers import pipeline
@@ -269,6 +269,29 @@ def slr_selection_generate_per_criteria(request: SlrSelectionPerCriteriaRequest)
             prompt=prompts,
             **{"likert-score": scores}
         )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class PostprocessingRequest(BaseModel):
+    likert_score: Union[float, list[float]] = Field(..., alias="likert-score")
+    threshold: float
+
+class PostprocessingResponse(BaseModel):
+    label: Union[str, list[str]]
+
+@app.post("/postprocessing", response_model=PostprocessingResponse)
+def postprocessing(request: PostprocessingRequest):
+    """
+    Endpoint to assign 'relevant' or 'irrelevant' labels based on likert-score(s)
+    and a given threshold. Works for both a single score and a list of scores.
+    """
+    try:
+        if isinstance(request.likert_score, list):
+            labels = ["relevant" if score >= request.threshold else "irrelevant" for score in request.likert_score]
+            return PostprocessingResponse(label=labels)
+        else:
+            label = "relevant" if request.likert_score >= request.threshold else "irrelevant"
+            return PostprocessingResponse(label=label)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
