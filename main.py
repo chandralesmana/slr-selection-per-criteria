@@ -14,14 +14,7 @@ models_cache = {}
 
 # Prompt template for the SLR (Systematic Literature Review) selection task.
 # The placeholders {title}, {abstract}, and {criteria} are filled at request time.
-SLR_SELECTION_PROMPT_TEMPLATE = """
-On a scale from 1 (very low probability) to 5 (very high probability), how would you rate the relevance of the scientific publication for inclusion into a systematic literature review based on the relevant criteria and based on title and abstract? 
-Title: “{title}” 
-Abstract: “{abstract}” 
-Relevant Criteria: 
-“{criteria}”
-Answer:
-"""
+SLR_SELECTION_PROMPT_TEMPLATE = "On a scale from 1 (very low probability) to 5 (very high probability), how would you rate the relevance of the scientific publication for inclusion into a systematic literature review based on the relevant criteria and based on title and abstract? Title: “{title}” Abstract: “{abstract}” Relevant Criteria: “{criteria}” Answer:"
 
 def get_model(model_name: str, hf_token: Optional[str] = None, enable_gpu: bool = False):
     cache_key = f"{model_name}_{'gpu' if enable_gpu else 'cpu'}"
