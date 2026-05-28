@@ -1,9 +1,10 @@
 import time
 import gc
+import re
 import torch
 from typing import Optional
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from transformers import pipeline
 
 # Initialize the FastAPI application
@@ -156,3 +157,51 @@ def slr_selection_generate(request: SlrSelectionRequest):
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+class SlrSelectionResponse(BaseModel):
+    prompt: str
+    likert_score: float = Field(..., alias="likert-score")
+
+@app.post("/slr-selection-generate-global", response_model=SlrSelectionResponse)
+def slr_selection_generate_global_structured(request: SlrSelectionRequest):
+    """
+    Endpoint that builds an SLR selection prompt and returns a structured output
+    containing ONLY the prompt and the extracted likert score as a float.
+    """
+    try:
+        if not request.title.strip():
+            raise HTTPException(status_code=400, detail="Title must not be empty")
+        if not request.abstract.strip():
+            raise HTTPException(status_code=400, detail="Abstract must not be empty")
+        if not request.criteria.strip():
+            raise HTTPException(status_code=400, detail="Criteria must not be empty")
+
+        # Build the final prompt by injecting the inputs into the template
+        prompt = SLR_SELECTION_PROMPT_TEMPLATE.format(
+            title=request.title,
+            abstract=request.abstract,
+            criteria=request.criteria,
+        )
+
+        # Retrieve the model from cache or load a new one
+        generator = get_model(request.model_name, request.hf_token, request.enable_gpu)
+
+        # Run the model with additional parameters
+        result = generator(prompt, max_length=request.max_length, num_return_sequences=1)
+        
+        # Extract the score from the generated output
+        generated_text = result[0]['generated_text']
+        # Look only at the newly generated text if it includes the prompt
+        new_text = generated_text[len(prompt):] if generated_text.startswith(prompt) else generated_text
+        
+        # Simple regex to find a number between 1 and 5 (including floats)
+        match = re.search(r'\b([1-5](?:\.\d+)?)\b', new_text)
+        score = float(match.group(1)) if match else 0.0
+
+        return SlrSelectionResponse(
+            prompt=prompt,
+            **{"likert-score": score}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
