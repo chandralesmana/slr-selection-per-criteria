@@ -1,4 +1,6 @@
 import time
+import gc
+import torch
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -27,11 +29,36 @@ def get_model(model_name: str, hf_token: Optional[str] = None, enable_gpu: bool 
         print(f"Loading model {model_name} (GPU: {enable_gpu}), this may take a moment...")
         try:
             device = 0 if enable_gpu else -1
-            models_cache[cache_key] = pipeline("text-generation", model=model_name, token=hf_token, device=device)
+            
+            kwargs = {}
+            if enable_gpu:
+                # Use float16 to halve the VRAM requirement on GPU
+                kwargs["torch_dtype"] = torch.float16
+                
+            models_cache[cache_key] = pipeline(
+                "text-generation", 
+                model=model_name, 
+                token=hf_token, 
+                device=device,
+                **kwargs
+            )
             print(f"Model {model_name} loaded successfully on {'GPU' if enable_gpu else 'CPU'}!")
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to load model '{model_name}': {str(e)}")
     return models_cache[cache_key]
+
+@app.post("/clear-cache")
+def clear_cache():
+    """
+    Clears the loaded models from memory and empties the CUDA cache.
+    Use this if you encounter CUDA Out of Memory errors.
+    """
+    global models_cache
+    models_cache.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    return {"message": "Model cache cleared and GPU memory freed."}
 
 # Request schema using Pydantic
 class TextRequest(BaseModel):
