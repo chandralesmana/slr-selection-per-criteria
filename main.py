@@ -278,6 +278,7 @@ class PostprocessingRequest(BaseModel):
     logic: str = "AND"
 
 class PostprocessingResponse(BaseModel):
+    label_per_criteria: Optional[list[str]] = None
     label: str
 
 @app.post("/postprocessing", response_model=PostprocessingResponse)
@@ -285,12 +286,15 @@ def postprocessing(request: PostprocessingRequest):
     """
     Endpoint to assign 'relevant' or 'irrelevant' labels based on likert-score(s)
     and a given threshold. Works for both a single score and a list of scores.
-    If a list is provided, it aggregates the boolean results using the specified logic (AND/OR).
+    If a list is provided, it returns labels per criteria array and aggregates the boolean results using the specified logic (AND/OR).
     """
     try:
         if isinstance(request.likert_score, list):
             # Check threshold for each score
             bool_results = [score >= request.threshold for score in request.likert_score]
+            
+            # Map booleans to labels corresponding to each criterion
+            labels_per_criteria = ["relevant" if res else "irrelevant" for res in bool_results]
             
             # Aggregate using the specified logic
             if request.logic.upper() == "OR":
@@ -299,7 +303,7 @@ def postprocessing(request: PostprocessingRequest):
                 final_result = all(bool_results)  # default to AND
                 
             label = "relevant" if final_result else "irrelevant"
-            return PostprocessingResponse(label=label)
+            return PostprocessingResponse(label_per_criteria=labels_per_criteria, label=label)
         else:
             label = "relevant" if request.likert_score >= request.threshold else "irrelevant"
             return PostprocessingResponse(label=label)
