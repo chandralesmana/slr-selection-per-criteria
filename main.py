@@ -205,3 +205,71 @@ def slr_selection_generate_global_structured(request: SlrSelectionRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class SlrSelectionPerCriteriaRequest(BaseModel):
+    title: str
+    abstract: str
+    criteria: list[str]
+    model_name: str = ""
+    hf_token: Optional[str] = None
+    max_length: int = 50
+    enable_gpu: bool = True
+    debug: bool = True
+
+class SlrSelectionPerCriteriaResponse(BaseModel):
+    prompt: list[str]
+    likert_score: list[float] = Field(..., alias="likert-score")
+
+@app.post("/slr-selection-generate-per-criteria", response_model=SlrSelectionPerCriteriaResponse)
+def slr_selection_generate_per_criteria(request: SlrSelectionPerCriteriaRequest):
+    """
+    Endpoint that builds SLR selection prompts iteratively for a list of criteria,
+    runs inference on each, and returns a list of likert scores corresponding to each criterion.
+    """
+    try:
+        if not request.title.strip():
+            raise HTTPException(status_code=400, detail="Title must not be empty")
+        if not request.abstract.strip():
+            raise HTTPException(status_code=400, detail="Abstract must not be empty")
+        if not request.criteria:
+            raise HTTPException(status_code=400, detail="Criteria list must not be empty")
+
+        generator = get_model(request.model_name, request.hf_token, request.enable_gpu)
+
+        prompts = []
+        scores = []
+
+        for criterion in request.criteria:
+            if not criterion.strip():
+                prompts.append("")
+                scores.append(0.0)
+                continue
+
+            # Build the final prompt by injecting the inputs into the template
+            prompt = SLR_SELECTION_PROMPT_TEMPLATE.format(
+                title=request.title,
+                abstract=request.abstract,
+                criteria=criterion,
+            )
+            prompts.append(prompt)
+
+            # Run the model with additional parameters
+            result = generator(prompt, max_length=request.max_length, num_return_sequences=1)
+            
+            # Extract the score from the generated output
+            generated_text = result[0]['generated_text']
+            new_text = generated_text[len(prompt):] if generated_text.startswith(prompt) else generated_text
+            
+            # Simple regex to find a number between 1 and 5 (including floats)
+            match = re.search(r'\b([1-5](?:\.\d+)?)\b', new_text)
+            score = float(match.group(1)) if match else 0.0
+            
+            scores.append(score)
+
+        return SlrSelectionPerCriteriaResponse(
+            prompt=prompts,
+            **{"likert-score": scores}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
